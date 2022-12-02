@@ -5,9 +5,13 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <time.h>
 
 #define PORT 2854
 #define BUFFER_SIZE 1024
+// maximum connection requests queued
+#define QUEUE_CONNECTION 20
+
 void error(char *msg);
 
 int main() {
@@ -18,6 +22,7 @@ int main() {
     if (server_socket < 0) {
         error("Error: create socket failed");
     }
+    printf("Server: Create socket succeed\n");
 
     // Bind the socket to an address using the bind() system call.
     // For a server socket on the Internet, an address consists of a port number on the host machine.
@@ -29,11 +34,13 @@ int main() {
     if (bind(server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
         error("Error: bind failed");
     }
+    printf("Server: bind succeed\n");
 
     // Listen for connections
-    if (listen(server_socket, 20) < 0) {
+    if (listen(server_socket, QUEUE_CONNECTION) < 0) {
         error("Error: listen failed");
     }
+    printf("Server: listen succeed\n");
 
     // Accept a connection 
     struct sockaddr_in new_addr;
@@ -55,11 +62,23 @@ int main() {
                     error("Error: receive data failed");
                     break;
                 }
-                else {
-                    printf("Client: %s from %s:%d\n", buffer, inet_ntoa(new_addr.sin_addr), ntohs(new_addr.sin_port));
-                    send(new_socket, buffer, sizeof(buffer), 0);
-                    bzero(buffer, sizeof(buffer));
+                printf("Client: %s from %s:%d\n", buffer, inet_ntoa(new_addr.sin_addr), ntohs(new_addr.sin_port));
+                
+                if (strcmp(buffer, "3") == 0) {
+                    time_t seconds;
+                    seconds = time(NULL);
+                    // itoa(seconds/3600, buffer, 10);
+                    sprintf(buffer, "%ld", seconds/3600);
+                    printf("自 1970-01-01 起的小时数 = %ld\n", seconds/3600);
                 }
+                if (strcmp(buffer, "4") == 0) {
+                    char server_name[256];
+                    gethostname(server_name, sizeof(server_name));
+                    strcpy(buffer, server_name);
+                    printf("server_name = %s\n", server_name);
+                }
+                send(new_socket, buffer, sizeof(buffer), 0);
+                bzero(buffer, sizeof(buffer));
             }
         }
     }

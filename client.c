@@ -29,10 +29,17 @@ int main(){
     // transfer    
     char buffer[BUFFER_SIZE];
     while(1) {
-        printf("[Client]: ");
+        printf("Client:\n");
+        printf("[1] Connect\n");
+        printf("[2] Disconnect\n");
+        printf("[3] Get time\n");
+        printf("[4] Get host name\n");
+        printf("[5] Get activitiy link list\n");
+        printf("[6] Send message\n");
+        printf("[7] Exit\n");
+
         scanf("%s", buffer);
         send(client_socket, buffer, sizeof(buffer), 0);
-        // write(client_socket, buffer, sizeof(buffer));
         
         if (strcmp(buffer, "exit") == 0) {
             close(client_socket);
