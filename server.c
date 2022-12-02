@@ -10,9 +10,11 @@
 #define PORT 2854
 #define BUFFER_SIZE 1024
 // maximum connection requests queued
-#define QUEUE_CONNECTION 20
+#define QUEUE_CONNECTION 2
 
 void error(char *msg);
+int en_queue(struct sockaddr_in *addr, int front, int rear, struct sockaddr_in new_addr);
+int de_queue(struct sockaddr_in *addr, int front, int rear);
 
 int main() {
     // create socket
@@ -42,7 +44,14 @@ int main() {
     }
     printf("Server: listen succeed\n");
 
+    // // Accept a connection 
+    // struct sockaddr_in new_addr;
+    // socklen_t new_addr_size = sizeof(new_addr);
+    // int new_socket;
     // Accept a connection 
+    struct sockaddr_in addr[QUEUE_CONNECTION + 1];
+    int front = 0, rear = 0;
+
     struct sockaddr_in new_addr;
     socklen_t new_addr_size = sizeof(new_addr);
     int new_socket;
@@ -55,7 +64,10 @@ int main() {
         if (new_socket < 0) {
             error("Error: accept failed");
         }
+
         printf("Connection accepted from %s:%d\n", inet_ntoa(new_addr.sin_addr), ntohs(new_addr.sin_port));
+        rear = en_queue(addr, front, rear, new_addr);
+
         if ((childPid = fork()) == 0) {
             while (1) {
                 if (recv(new_socket, buffer, sizeof(buffer), 0) < 0) {
@@ -63,7 +75,6 @@ int main() {
                     break;
                 }
                 printf("Client: %s from %s:%d\n", buffer, inet_ntoa(new_addr.sin_addr), ntohs(new_addr.sin_port));
-                
                 if (strcmp(buffer, "3") == 0) {
                     time_t seconds;
                     seconds = time(NULL);
@@ -76,6 +87,14 @@ int main() {
                     gethostname(server_name, sizeof(server_name));
                     strcpy(buffer, server_name);
                     printf("server_name = %s\n", server_name);
+                }
+                if (strcmp(buffer, "5") == 0) {
+                    for (int i = front; i != rear; i = (i + 1) % (QUEUE_CONNECTION + 1)) {
+                        sprintf(buffer, "sequence number: %d, %s:%d", i, inet_ntoa(new_addr.sin_addr), ntohs(new_addr.sin_port));
+                    }
+                }
+                if (strcmp(buffer, "6") == 0) {
+                    
                 }
                 send(new_socket, buffer, sizeof(buffer), 0);
                 bzero(buffer, sizeof(buffer));
@@ -93,4 +112,26 @@ int main() {
 void error(char *msg) {
     perror(msg);
     exit(1);
+}
+
+int en_queue(struct sockaddr_in *addr, int front, int rear, struct sockaddr_in new_addr) {
+    if ((rear + 1) % (QUEUE_CONNECTION + 1) ==front) {
+        perror("queue is full\n");
+        return rear;
+    }
+    addr[rear % (QUEUE_CONNECTION + 1)] = new_addr;
+    // rear++;
+    rear = (rear + 1) % (QUEUE_CONNECTION + 1);
+    return rear;
+}
+
+int de_queue(struct sockaddr_in *addr, int front, int rear) {
+    if(front == rear % (QUEUE_CONNECTION + 1)) {
+        perror("Error: queue is empty\n");
+        return front;
+    }
+    // printf("%d ",a[front]);
+
+    front = (front + 1) % (QUEUE_CONNECTION + 1);
+    return front;
 }
