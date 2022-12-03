@@ -10,15 +10,14 @@
 #define PORT 2854
 #define BUFFER_SIZE 1024
 // maximum connection requests queued
-#define QUEUE_CONNECTION 2
+#define QUEUE_CONNECTION 5
 
 void error(char *msg);
 int en_queue(struct sockaddr_in *addr, int front, int rear, struct sockaddr_in new_addr);
 int de_queue(struct sockaddr_in *addr, int front, int rear);
 
 int main() {
-    // create socket
-    // server_socket: socket descriptor, an integer (like a file-handle)
+    // Create an unnamed socket for the server
     // AF_INET: IPv4, SOCK_STREAM: TCP(reliable, connection oriented), protocol is zero, meaning the operating system will choose the most appropriate protocol.
     int server_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (server_socket < 0) {
@@ -26,7 +25,7 @@ int main() {
     }
     printf("Server: Create socket succeed\n");
 
-    // Bind the socket to an address using the bind() system call.
+    // Name the socket
     // For a server socket on the Internet, an address consists of a port number on the host machine.
     struct sockaddr_in server_addr;
     memset(&server_addr, 0, sizeof(server_addr));
