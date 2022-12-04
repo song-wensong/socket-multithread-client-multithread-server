@@ -6,6 +6,8 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <time.h>
+#include <pthread.h>
+#include <time.h>
 
 #define PORT 2854
 #define BUFFER_SIZE 1024
@@ -15,6 +17,7 @@
 void error(char *msg);
 int en_queue(struct sockaddr_in *addr, int front, int rear, struct sockaddr_in new_addr);
 int de_queue(struct sockaddr_in *addr, int front, int rear);
+void *HandleThread(void *sock_fd);
 
 int main() {
     // Create an unnamed socket for the server
@@ -43,10 +46,6 @@ int main() {
     }
     printf("Server: listen succeed\n");
 
-    // // Accept a connection 
-    // struct sockaddr_in new_addr;
-    // socklen_t new_addr_size = sizeof(new_addr);
-    // int new_socket;
     // Accept a connection 
     struct sockaddr_in addr[QUEUE_CONNECTION + 1];
     int front = 0, rear = 0;
@@ -54,10 +53,10 @@ int main() {
     struct sockaddr_in new_addr;
     socklen_t new_addr_size = sizeof(new_addr);
     int new_socket;
-    
+
     // send and receive data
     char buffer[BUFFER_SIZE];
-    pid_t childPid;
+    // pid_t childPid;
     while (1) {
         new_socket = accept(server_socket, (struct sockaddr*)&new_addr, &new_addr_size);
         if (new_socket < 0) {
@@ -67,37 +66,13 @@ int main() {
         printf("Connection accepted from %s:%d\n", inet_ntoa(new_addr.sin_addr), ntohs(new_addr.sin_port));
         rear = en_queue(addr, front, rear, new_addr);
 
-        if ((childPid = fork()) == 0) {
-            while (1) {
-                if (recv(new_socket, buffer, sizeof(buffer), 0) < 0) {
-                    error("Error: receive data failed");
-                    break;
-                }
-                printf("Client: %s from %s:%d\n", buffer, inet_ntoa(new_addr.sin_addr), ntohs(new_addr.sin_port));
-                if (strcmp(buffer, "3") == 0) {
-                    time_t seconds;
-                    seconds = time(NULL);
-                    // itoa(seconds/3600, buffer, 10);
-                    sprintf(buffer, "%ld", seconds/3600);
-                    printf("自 1970-01-01 起的小时数 = %ld\n", seconds/3600);
-                }
-                if (strcmp(buffer, "4") == 0) {
-                    char server_name[256];
-                    gethostname(server_name, sizeof(server_name));
-                    strcpy(buffer, server_name);
-                    printf("server_name = %s\n", server_name);
-                }
-                if (strcmp(buffer, "5") == 0) {
-                    for (int i = front; i != rear; i = (i + 1) % (QUEUE_CONNECTION + 1)) {
-                        sprintf(buffer, "sequence number: %d, %s:%d", i, inet_ntoa(new_addr.sin_addr), ntohs(new_addr.sin_port));
-                    }
-                }
-                if (strcmp(buffer, "6") == 0) {
-                    
-                }
-                send(new_socket, buffer, sizeof(buffer), 0);
-                bzero(buffer, sizeof(buffer));
-            }
+        pthread_t tid;
+        if (pthread_create(&tid, NULL, HandleThread, &new_socket) != 0) {
+            close(new_socket);
+            error("Error: client create thread failed\n");
+        }
+        else {
+            printf("Server: Connection succeed\n");
         }
     }
    
@@ -134,3 +109,121 @@ int de_queue(struct sockaddr_in *addr, int front, int rear) {
     front = (front + 1) % (QUEUE_CONNECTION + 1);
     return front;
 }
+
+
+// This will handle connection for each client
+void *HandleThread(void *sock_fd) {
+	// Get the socket descriptor
+	int conn_id = *(int*)sock_fd;
+	
+	// request data
+	char receive_packet[BUFFER_SIZE];
+	
+	// // response data
+	// char response[BUFFER_SIZE];
+	
+	// read response continue
+	while (1) {
+		memset(receive_packet, 0, sizeof(receive_packet));
+        if (recv(conn_id, receive_packet, BUFFER_SIZE, 0) > 0) {
+            // judge if a complete response packet
+            if (*receive_packet == '$' && *(receive_packet + 1) == 'Q' && *((char*)((int*)(receive_packet + 3) + 1)) == '$') {
+                if (*(receive_packet + 2) == 'T') {
+                    time_t *timep = malloc(sizeof(time_t));
+                    time(timep);
+                    char *host_time = ctime(timep);
+
+                    // build response packet
+                    char *response = (char*)malloc(sizeof(char) * 4 + sizeof(int) + sizeof(char) * 1024);
+                    memset(response, 0, sizeof(char) * 4 + sizeof(int) + sizeof(char) * 1024);
+                    *response = '$';
+                    *(response + 1) = 'R';
+                    *(response + 2) = 'T';
+                    int length = strlen(host_time) + sizeof(char) * 4 + sizeof(int);
+                    // int length = strlen(host_time) + ((char*)((int *)(response + 3) + 2)) ;
+                    // int length = strlen(host_time);
+                    // *(int*)(response + 3) = length;
+                    printf("length = %d\n", length);// debug
+                    // int test = -1;
+                    // *(int*)(response + 3) = -1;// bug
+                    // *(int*)(response + 3) = test;// bug
+                    *(int*)(response + 3) = length;
+                    *((char*)((int *)(response + 3) + 1)) = '$';
+                    strcat((char*)((int *)(response + 3) + 1), host_time);
+
+                    if (send(conn_id, response, length, 0) > 0) {
+                        // printf("Server send: %s\n", response);
+                        for (int i = 0; i < length; i++) {
+                            printf("%c ", *(response + i));
+                        }
+                        printf("length = %d\n", length);
+                        printf("\n");
+                        printf("Server send: %s\n", response);
+                    }
+                    free(response);
+                }
+                else if (*(receive_packet + 2) == 'N') {
+                    char host_name[BUFFER_SIZE];
+                    gethostname(host_name, sizeof(host_name));
+                    // build response packet
+                    char *response = (char*)malloc(sizeof(char) * 4 + sizeof(int) + sizeof(char) * 1024);
+                    memset(response, 0, sizeof(char) * 4 + sizeof(int) + sizeof(char) * 1024);
+                    *response = '$';
+                    *(response + 1) = 'R';
+                    *(response + 2) = 'N';
+                    int length = (int)(strlen(host_name) + sizeof(char) * 4 + sizeof(int));
+                    printf("length = %d\n", length);// debug
+                    // *(int*)(response + 3) = length;
+                    *(int*)(response + 3) = -1;// bug
+                    *((char*)((int *)(response + 3) + 1)) = '$';
+                    strcat((char*)((int *)(response + 3) + 1), host_name);
+
+                    if (send(conn_id, response, BUFFER_SIZE, 0) > 0) {// some improvement
+                        printf("Server send: %s\n", response);
+                    }
+                    // char *p = response;
+                    // while (length > 0) {
+                    //     send(conn_id, p, length > BUFFER_SIZE ? BUFFER_SIZE : length, 0);
+                    //     length -= BUFFER_SIZE;
+                    //     p += BUFFER_SIZE;
+                    // }
+                    free(response);
+                }
+                else if (*(receive_packet + 2) == 'L') {
+
+                }
+                else if (*(receive_packet + 2) == 'M') {
+
+                }
+            }
+            
+            
+            // // send response
+            // if (send(conn_id, receive_packet, strlen(response), 0) > 0) {
+            //     printf("SEND: %s\n", receive_packet);
+            // }
+            // else {
+            //     perror("send message error\n");
+            // }
+            bzero(receive_packet, sizeof(receive_packet));
+        }
+	}
+	
+	// // terminate connection
+	// close(conn_id);
+	// std::cout << "[INFO] CONNECTION CLOSED\n";
+	
+	// // decrease connection counts
+	// connection--;
+	
+	// // thread automatically terminate after exit connection handler
+	// std::cout << "[INFO] THREAD TERMINATED" << std::endl;
+	
+	close(conn_id);
+	
+	// // print line
+	// std::cout << "------------------------" << std::endl;
+	
+	// exiting
+	pthread_exit(NULL);
+} 

@@ -40,19 +40,21 @@ int main(){
         printf("[5] Get activitiy link list\n");
         printf("[6] Send message\n");
         printf("[7] Exit\n");
+        printf("Select a number above: \n");
 
         scanf("%s", buffer);
         // send(client_socket, buffer, sizeof(buffer), 0);
         if (strcmp(buffer, "1") == 0) {
             // have connected
             if (connected == 1) {
-                printf("Server: Have connected\n");
+                printf("Client: Have connected\n");
             }
             // have not connected
             // connect failed
             else if (connect(client_socket, (struct sockaddr*)&server_addr, sizeof(server_addr))) {
                 close(client_socket);
-                error("Error: connect failed");
+                // error("Error: connect failed");
+                printf("Client: Connect failed");
             }
             // connect succeed
             else {
@@ -74,8 +76,9 @@ int main(){
         if (strcmp(buffer, "2") == 0) {
             if (connected == 1) {
                 connected = 0;
+                printf("Server: disconnected and exit\n");
                 close(client_socket);
-                //  
+                break;
             }
             else {
                 printf("No connection\n");
@@ -180,26 +183,69 @@ void *ReceiveThread(void *sock_fd) {
 	int conn_id = *(int*)sock_fd;
 	
 	// request data
-	char buffer[BUFFER_SIZE] = {0};
+	char request[BUFFER_SIZE];
 	
 	// response data
-	char response[] = "Hello";
+	char response[BUFFER_SIZE];
 	
 	// read response continue
-	while (recv(conn_id, buffer, BUFFER_SIZE, 0) > 0) {
-		// judge if a complete response packet
-        
+	while (1) {
+        // judge if a complete response packet
+        if (recv(conn_id, response, BUFFER_SIZE, 0) > 0) {
+            printf("Client: receive: %s\n", request);
+            if (*response == '$' && *(response + 1) == 'R' && *((char*)((int*)(response + 3) + 1)) == '$') {
+                if (*(response + 2) == 'T') {
+                    int lengh = *(int*)(response + 3);
+                    char *host_time = (char*)malloc(lengh * sizeof(char) - sizeof(char) * 4 - sizeof(int) + sizeof(char));
+                    strcpy(host_time, (char*)((int *)(response + 3) + 1) + 1);
+                    *(host_time + lengh - 8) = 0;
+                    printf("Client get response successfully, time is %s\n", host_time);
+                    free(host_time);
+                }
+                else if (*(response + 2) == 'N') {
+                    // char host_name[BUFFER_SIZE];
+                    // gethostname(host_name, sizeof(host_name));
+                    // // build response packet
+                    // char *response = (char*)malloc(sizeof(char) * 4 + sizeof(int) + sizeof(char) * 1024);
+                    // memset(response, 0, sizeof(char) * 4 + sizeof(int) + sizeof(char) * 1024);
+                    // *response = '$';
+                    // *(response + 1) = 'R';
+                    // *(response + 2) = 'N';
+                    // int length = (int)(strlen(host_name) + sizeof(char) * 4 + sizeof(int));
+                    // printf("length = %d\n", length);// debug
+                    // // *(int*)(response + 3) = length;
+                    // *(int*)(response + 3) = -1;// bug
+                    // *((char*)((int *)(response + 3) + 1)) = '$';
+                    // strcat((char*)((int *)(response + 3) + 1), host_name);
 
-		// // clear buffer data
-		// memset(buffer, 0, BUFFER_SIZE);
+                    // if (send(conn_id, response, length, 0) > 0) {
+                    //     printf("Server send: %s\n", response);
+                    // }
+                    // // char *p = response;
+                    // // while (length > 0) {
+                    // //     send(conn_id, p, length > BUFFER_SIZE ? BUFFER_SIZE : length, 0);
+                    // //     length -= BUFFER_SIZE;
+                    // //     p += BUFFER_SIZE;
+                    // // }
+                    // free(response);
+                }
+                else if (*(response + 2) == 'L') {
+
+                }
+                else if (*(response + 2) == 'M') {
+
+                }
+            }
+        }
+		// clear request data
+		memset(request, 0, BUFFER_SIZE);
 		
-		// send response
-		if (send(conn_id, response, strlen(response), 0) > 0) {
-			printf("SEND: %s\n", response);
-		} else {
-			perror("send message error\n");
-		}
-		
+		// // send response
+		// if (send(conn_id, response, strlen(response), 0) > 0) {
+		// 	printf("SEND: %s\n", response);
+		// } else {
+		// 	perror("send message error\n");
+		// }
 	}
 	
 	// // terminate connection
