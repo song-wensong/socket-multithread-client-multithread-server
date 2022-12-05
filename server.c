@@ -19,6 +19,13 @@ int en_queue(struct sockaddr_in *addr, int front, int rear, struct sockaddr_in n
 int de_queue(struct sockaddr_in *addr, int front, int rear);
 void *HandleThread(void *sock_fd);
 
+int Client_num = 0;
+struct sockaddr_in addr[QUEUE_CONNECTION + 1];
+struct Client_list {
+    int socket;
+    int index;
+};
+
 int main() {
     // Create an unnamed socket for the server
     // AF_INET: IPv4, SOCK_STREAM: TCP(reliable, connection oriented), protocol is zero, meaning the operating system will choose the most appropriate protocol.
@@ -47,7 +54,7 @@ int main() {
     printf("Server: listen succeed\n");
 
     // Accept a connection 
-    struct sockaddr_in addr[QUEUE_CONNECTION + 1];
+    // struct sockaddr_in addr[QUEUE_CONNECTION + 1];
     int front = 0, rear = 0;
 
     struct sockaddr_in new_addr;
@@ -64,10 +71,16 @@ int main() {
         }
 
         printf("Connection accepted from %s:%d\n", inet_ntoa(new_addr.sin_addr), ntohs(new_addr.sin_port));
-        rear = en_queue(addr, front, rear, new_addr);
+        // rear = en_queue(addr, front, rear, new_addr);
+        addr[Client_num] = new_addr;
+        struct Client_list new_client;
+        new_client.index = Client_num;
+        new_client.socket = new_socket;
+        Client_num++;
 
         pthread_t tid;
-        if (pthread_create(&tid, NULL, HandleThread, &new_socket) != 0) {
+        // if (pthread_create(&tid, NULL, HandleThread, &new_socket) != 0) {
+        if (pthread_create(&tid, NULL, HandleThread, &new_client) != 0) {
             close(new_socket);
             error("Error: client create thread failed\n");
         }
@@ -112,10 +125,12 @@ int de_queue(struct sockaddr_in *addr, int front, int rear) {
 
 
 // This will handle connection for each client
-void *HandleThread(void *sock_fd) {
+void *HandleThread(void *new_client) {
 	// Get the socket descriptor
-	int conn_id = *(int*)sock_fd;
-	
+	struct Client_list client_socket = *(struct Client_list*)new_client;
+	int conn_id = client_socket.socket;
+    int list_number = client_socket.index;
+
 	// request data
 	char receive_packet[BUFFER_SIZE];
 	
@@ -142,16 +157,12 @@ void *HandleThread(void *sock_fd) {
                     int length = strlen(host_time) + sizeof(char) * 4 + sizeof(int);
                     // int length = strlen(host_time) + ((char*)((int *)(response + 3) + 2)) ;
                     // int length = strlen(host_time);
-                    // *(int*)(response + 3) = length;
                     printf("length = %d\n", length);// debug
-                    // int test = -1;
-                    // *(int*)(response + 3) = -1;// bug
-                    // *(int*)(response + 3) = test;// bug
                     *(int*)(response + 3) = length;
                     *((char*)((int *)(response + 3) + 1)) = '$';
                     strcat((char*)((int *)(response + 3) + 1), host_time);
 
-                    if (send(conn_id, response, length, 0) > 0) {
+                    if (send(conn_id, response, BUFFER_SIZE, 0) > 0) {
                         // printf("Server send: %s\n", response);
                         for (int i = 0; i < length; i++) {
                             printf("%c ", *(response + i));
@@ -172,28 +183,75 @@ void *HandleThread(void *sock_fd) {
                     *(response + 1) = 'R';
                     *(response + 2) = 'N';
                     int length = (int)(strlen(host_name) + sizeof(char) * 4 + sizeof(int));
-                    printf("length = %d\n", length);// debug
-                    // *(int*)(response + 3) = length;
-                    *(int*)(response + 3) = -1;// bug
+                    // printf("length = %d\n", length);// debug
+                    *(int*)(response + 3) = length;
                     *((char*)((int *)(response + 3) + 1)) = '$';
                     strcat((char*)((int *)(response + 3) + 1), host_name);
 
                     if (send(conn_id, response, BUFFER_SIZE, 0) > 0) {// some improvement
                         printf("Server send: %s\n", response);
                     }
-                    // char *p = response;
-                    // while (length > 0) {
-                    //     send(conn_id, p, length > BUFFER_SIZE ? BUFFER_SIZE : length, 0);
-                    //     length -= BUFFER_SIZE;
-                    //     p += BUFFER_SIZE;
-                    // }
                     free(response);
                 }
                 else if (*(receive_packet + 2) == 'L') {
-
+                    // build response packet
+                    char *response = (char*)malloc(sizeof(char) * 4 + sizeof(int) + Client_num * (sizeof(int) + sizeof(struct sockaddr_in)));
+                    memset(response, 0, sizeof(char) * 4 + sizeof(int) + Client_num * (sizeof(int) + sizeof(struct sockaddr_in)));
+                    *response = '$';
+                    *(response + 1) = 'R';
+                    *(response + 2) = 'L';
+                    int length = (int)(sizeof(char) * 4 + sizeof(int) + Client_num * (sizeof(int) + sizeof(struct sockaddr_in)));
+                    // printf("length = %d\n", length);// debug
+                    *(int*)(response + 3) = length;
+                    *((char*)((int *)(response + 3) + 1)) = '$';
+                    // strcat((char*)((int *)(response + 3) + 1), host_name);
+                    char *p = (char*)((int *)(response + 3) + 1) + 1;
+                    for (int i = 0; i < Client_num; i++) {
+                        *((int*)p) = i;
+                        p = (char*)((int*)p + 1);
+                        *((struct sockaddr_in*)p) = addr[i];
+                        p = (char*)((struct sockaddr_in*)p + 1);
+                    }
+                    *p = 0;
+                    if (send(conn_id, response, BUFFER_SIZE, 0) > 0) {// some improvement
+                        printf("Server send: %s\n", response);
+                    }
+                    free(response);
                 }
                 else if (*(receive_packet + 2) == 'M') {
+                    // build response packet
+                    int length = *(int*)(receive_packet + 3);
+                    printf("%d\n", length);
+                    // *((char*)((int*)(receive_packet + 3) + 1)) == '$'
+                    // printf("%c\n", *((char*)((int*)(receive_packet + 3) + 1)));
+                    printf("%c\n", *((char*)(receive_packet + 7)));
+                    // printf("%d\n", *((int*)((char*)((int *)(receive_packet + 3) + 1) + 1)));
+                    printf("%d\n", *((int*)(receive_packet + 8)));
+                    // int des_list_number = *((int*)(receive_packet + 8));
+                    int des_list_number = *((int*)((char*)((int *)(receive_packet + 3) + 1) + 1));
+                    char *p = (char*)((int*)((char*)((int *)(receive_packet + 3) + 1) + 1) + 1);
+                    // p = receive_packet + 12;
+                    printf("content = %s\n", p);
 
+                    *(receive_packet + 1) = 'I';
+                    *((int*)((char*)((int *)(receive_packet + 3) + 1) + 1)) = list_number;
+                    
+                    // char *response = (char*)malloc(length);
+                    // memset(response, 0, length);
+                    // *response = '$';
+                    // *(response + 1) = 'I';
+                    // *(response + 2) = 'M';
+                    // *(int*)(response + 3) = length;
+                    // *((char*)((int *)(response + 3) + 1)) = '$';
+                    // // strcat((char*)((int *)(response + 3) + 1), host_name);
+                    // strcat((char*)((int *)(response + 3) + 1), (char*)((int*)((char*)((int *)(receive_packet + 3) + 1) + 1) + 1));
+                    
+                    
+                    if (send(conn_id, receive_packet, length, 0) > 0) {// some improvement
+                        printf("Client[%d] send message to Client[%d]\n", list_number, des_list_number);
+                        printf("Server send: %s\n", receive_packet);
+                    }
+                    // free(response);
                 }
             }
             
