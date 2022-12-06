@@ -179,7 +179,9 @@ int main(){
             }
         }
         if (strcmp(buffer, "7") == 0) {
-            connected = 0;
+            if (connected == 1) {
+                connected = 0;
+            }
             close(client_socket);
             printf("Exit\n");
             // exit(1);

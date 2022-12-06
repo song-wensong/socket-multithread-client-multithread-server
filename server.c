@@ -21,9 +21,12 @@ void *HandleThread(void *sock_fd);
 
 int Client_num = 0;
 struct sockaddr_in addr[QUEUE_CONNECTION + 1];
+int connected[QUEUE_CONNECTION + 1];
+
 struct Client_list {
     int socket;
     int index;
+    int connected;
 };
 
 int main() {
@@ -76,12 +79,15 @@ int main() {
         struct Client_list new_client;
         new_client.index = Client_num;
         new_client.socket = new_socket;
+        connected[Client_num] = 1;
+        // new_client.connected = 1;
         Client_num++;
 
         pthread_t tid;
         // if (pthread_create(&tid, NULL, HandleThread, &new_socket) != 0) {
         if (pthread_create(&tid, NULL, HandleThread, &new_client) != 0) {
             close(new_socket);
+            connected[Client_num - 1] = 0;
             error("Error: client create thread failed\n");
         }
         else {
@@ -229,6 +235,9 @@ void *HandleThread(void *new_client) {
                     printf("%d\n", *((int*)(receive_packet + 8)));
                     // int des_list_number = *((int*)(receive_packet + 8));
                     int des_list_number = *((int*)((char*)((int *)(receive_packet + 3) + 1) + 1));
+                    // if (connected[des_list_number] == 1) {
+
+                    // }
                     char *p = (char*)((int*)((char*)((int *)(receive_packet + 3) + 1) + 1) + 1);
                     // p = receive_packet + 12;
                     printf("content = %s\n", p);
