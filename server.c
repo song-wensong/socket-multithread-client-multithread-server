@@ -13,6 +13,8 @@
 #define BUFFER_SIZE 1024
 // maximum connection requests queued
 #define QUEUE_CONNECTION 5
+#define CLIENT_NOT_EXIST 0
+#define CLIENT_NOT_CONNECT 1
 
 void error(char *msg);
 int en_queue(struct sockaddr_in *addr, int front, int rear, struct sockaddr_in new_addr);
@@ -22,12 +24,16 @@ void *HandleThread(void *sock_fd);
 int Client_num = 0;
 struct sockaddr_in addr[QUEUE_CONNECTION + 1];
 int connected[QUEUE_CONNECTION + 1];
+int exist[QUEUE_CONNECTION + 1];
 
 struct Client_list {
     int socket;
     int index;
+    int exist;
     int connected;
+    struct sockaddr_in addr;
 };
+struct Client_list client_list[QUEUE_CONNECTION + 1];
 
 int main() {
     // Create an unnamed socket for the server
@@ -75,17 +81,24 @@ int main() {
 
         printf("Connection accepted from %s:%d\n", inet_ntoa(new_addr.sin_addr), ntohs(new_addr.sin_port));
         // rear = en_queue(addr, front, rear, new_addr);
+        client_list[Client_num].addr = new_addr;
+        client_list[Client_num].index = Client_num;
+        client_list[Client_num].socket = new_socket;
+        client_list[Client_num].exist = 1;
+        client_list[Client_num].connected = 1;
+
         addr[Client_num] = new_addr;
-        struct Client_list new_client;
-        new_client.index = Client_num;
-        new_client.socket = new_socket;
+        // struct Client_list new_client;
+        // new_client.index = Client_num;
+        // new_client.socket = new_socket;
+        exist[Client_num] = 1;
         connected[Client_num] = 1;
         // new_client.connected = 1;
         Client_num++;
 
         pthread_t tid;
         // if (pthread_create(&tid, NULL, HandleThread, &new_socket) != 0) {
-        if (pthread_create(&tid, NULL, HandleThread, &new_client) != 0) {
+        if (pthread_create(&tid, NULL, HandleThread, &client_list[Client_num - 1]) != 0) {
             close(new_socket);
             connected[Client_num - 1] = 0;
             error("Error: client create thread failed\n");
@@ -107,27 +120,27 @@ void error(char *msg) {
     exit(1);
 }
 
-int en_queue(struct sockaddr_in *addr, int front, int rear, struct sockaddr_in new_addr) {
-    if ((rear + 1) % (QUEUE_CONNECTION + 1) ==front) {
-        perror("queue is full\n");
-        return rear;
-    }
-    addr[rear % (QUEUE_CONNECTION + 1)] = new_addr;
-    // rear++;
-    rear = (rear + 1) % (QUEUE_CONNECTION + 1);
-    return rear;
-}
+// int en_queue(struct sockaddr_in *addr, int front, int rear, struct sockaddr_in new_addr) {
+//     if ((rear + 1) % (QUEUE_CONNECTION + 1) ==front) {
+//         perror("queue is full\n");
+//         return rear;
+//     }
+//     addr[rear % (QUEUE_CONNECTION + 1)] = new_addr;
+//     // rear++;
+//     rear = (rear + 1) % (QUEUE_CONNECTION + 1);
+//     return rear;
+// }
 
-int de_queue(struct sockaddr_in *addr, int front, int rear) {
-    if(front == rear % (QUEUE_CONNECTION + 1)) {
-        perror("Error: queue is empty\n");
-        return front;
-    }
-    // printf("%d ",a[front]);
+// int de_queue(struct sockaddr_in *addr, int front, int rear) {
+//     if(front == rear % (QUEUE_CONNECTION + 1)) {
+//         perror("Error: queue is empty\n");
+//         return front;
+//     }
+//     // printf("%d ",a[front]);
 
-    front = (front + 1) % (QUEUE_CONNECTION + 1);
-    return front;
-}
+//     front = (front + 1) % (QUEUE_CONNECTION + 1);
+//     return front;
+// }
 
 
 // This will handle connection for each client
@@ -215,7 +228,8 @@ void *HandleThread(void *new_client) {
                     for (int i = 0; i < Client_num; i++) {
                         *((int*)p) = i;
                         p = (char*)((int*)p + 1);
-                        *((struct sockaddr_in*)p) = addr[i];
+                        // *((struct sockaddr_in*)p) = addr[i];
+                        *((struct sockaddr_in*)p) = client_list[i].addr;
                         p = (char*)((struct sockaddr_in*)p + 1);
                     }
                     *p = 0;
@@ -225,40 +239,44 @@ void *HandleThread(void *new_client) {
                     free(response);
                 }
                 else if (*(receive_packet + 2) == 'M') {
-                    // build response packet
-                    int length = *(int*)(receive_packet + 3);
-                    printf("%d\n", length);
-                    // *((char*)((int*)(receive_packet + 3) + 1)) == '$'
-                    // printf("%c\n", *((char*)((int*)(receive_packet + 3) + 1)));
-                    printf("%c\n", *((char*)(receive_packet + 7)));
-                    // printf("%d\n", *((int*)((char*)((int *)(receive_packet + 3) + 1) + 1)));
-                    printf("%d\n", *((int*)(receive_packet + 8)));
                     // int des_list_number = *((int*)(receive_packet + 8));
                     int des_list_number = *((int*)((char*)((int *)(receive_packet + 3) + 1) + 1));
-                    // if (connected[des_list_number] == 1) {
+                    printf("des_list_number = %d\n", des_list_number);
 
-                    // }
+                    // // build response packet
+                    int length = *(int*)(receive_packet + 3);
+                    // printf("%d\n", length);
                     char *p = (char*)((int*)((char*)((int *)(receive_packet + 3) + 1) + 1) + 1);
-                    // p = receive_packet + 12;
                     printf("content = %s\n", p);
 
-                    *(receive_packet + 1) = 'I';
-                    *((int*)((char*)((int *)(receive_packet + 3) + 1) + 1)) = list_number;
-                    
-                    // char *response = (char*)malloc(length);
-                    // memset(response, 0, length);
-                    // *response = '$';
-                    // *(response + 1) = 'I';
-                    // *(response + 2) = 'M';
-                    // *(int*)(response + 3) = length;
-                    // *((char*)((int *)(response + 3) + 1)) = '$';
-                    // // strcat((char*)((int *)(response + 3) + 1), host_name);
-                    // strcat((char*)((int *)(response + 3) + 1), (char*)((int*)((char*)((int *)(receive_packet + 3) + 1) + 1) + 1));
-                    
-                    
-                    if (send(conn_id, receive_packet, length, 0) > 0) {// some improvement
-                        printf("Client[%d] send message to Client[%d]\n", list_number, des_list_number);
-                        printf("Server send: %s\n", receive_packet);
+                    if (des_list_number < 0 || des_list_number >= QUEUE_CONNECTION || exist[des_list_number] == 0) {
+                        *(receive_packet + 1) = 'R';
+                        // printf("*(receive_packet + 1) = %c", *(receive_packet + 1));
+                        *((int*)((char*)((int *)(receive_packet + 3) + 1) + 1)) = CLIENT_NOT_EXIST;
+                        // printf("Client[%d] don't exist\n", des_list_number);
+                        // strcpy(p, "Target client does not exist.");
+                        printf("error_code = %d\n", *((int*)((char*)((int *)(receive_packet + 3) + 1) + 1)));
+                        if (send(conn_id, receive_packet, BUFFER_SIZE, 0) > 0) {// some improvement
+                            printf("Server send message to Client[%d]\n", list_number);
+                            printf("Server send: %s\n", receive_packet);
+                        }
+                    }
+                    else if (connected[des_list_number] == 1 && exist[des_list_number] == 1) {
+                        *(receive_packet + 1) = 'I';
+                        *((int*)((char*)((int *)(receive_packet + 3) + 1) + 1)) = list_number;
+                        if (send(client_list[des_list_number].socket , receive_packet, length, 0) > 0) {// some improvement
+                            printf("Client[%d] send message to Client[%d]\n", list_number, des_list_number);
+                            printf("Server send: %s\n", receive_packet);
+                        }
+                    }
+                    else if (connected[des_list_number] == 0 && exist[des_list_number] == 1) {
+                        *(receive_packet + 1) = 'R';
+                        printf("Client[%d] doesn't connect\n", des_list_number);
+                        *((int*)((char*)((int *)(receive_packet + 3) + 1) + 1)) = CLIENT_NOT_CONNECT;
+                        strcpy(p, "Target client does not connect.");
+                        if (send(conn_id, receive_packet, BUFFER_SIZE, 0) > 0) {// some improvement
+                            printf("Server send: %s\n", receive_packet);
+                        }
                     }
                     // free(response);
                 }
@@ -272,8 +290,13 @@ void *HandleThread(void *new_client) {
             // else {
             //     perror("send message error\n");
             // }
-            bzero(receive_packet, sizeof(receive_packet));
+            // bzero(receive_packet, sizeof(receive_packet));
         }
+        else {
+            connected[list_number] = 0;
+            // bzero(receive_packet, sizeof(receive_packet));
+        }
+        bzero(receive_packet, sizeof(receive_packet));
 	}
 	
 	// // terminate connection

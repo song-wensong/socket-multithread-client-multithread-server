@@ -8,6 +8,8 @@
 
 #define PORT 2854
 #define BUFFER_SIZE 1024
+#define CLIENT_NOT_EXIST 0
+#define CLIENT_NOT_CONNECT 1
 void error(char *msg);
 void *ReceiveThread(void *sock_fd);
 
@@ -29,30 +31,30 @@ int main(){
     // }
     int connected = 0;
 
-    printf("Client:\n");
-    printf("[1] Connect\n");
-    printf("[2] Disconnect\n");
-    printf("[3] Get time\n");
-    printf("[4] Get host name\n");
-    printf("[5] Get activitiy link list\n");
-    printf("[6] Send message\n");
-    printf("[7] Exit\n");
-    printf("Select a number above: \n");
+    // printf("Client:\n");
+    // printf("[1] Connect\n");
+    // printf("[2] Disconnect\n");
+    // printf("[3] Get time\n");
+    // printf("[4] Get host name\n");
+    // printf("[5] Get activitiy link list\n");
+    // printf("[6] Send message\n");
+    // printf("[7] Exit\n");
+    // printf("Select a number above: \n");
     // transfer    
     char buffer[BUFFER_SIZE];
     while(1) {
-        // printf("Client:\n");
-        // printf("[1] Connect\n");
-        // printf("[2] Disconnect\n");
-        // printf("[3] Get time\n");
-        // printf("[4] Get host name\n");
-        // printf("[5] Get activitiy link list\n");
-        // printf("[6] Send message\n");
-        // printf("[7] Exit\n");
-        // printf("Select a number above: \n");
+        printf("\n");
+        printf("Client:\n");
+        printf("[1] Connect\n");
+        printf("[2] Disconnect\n");
+        printf("[3] Get time\n");
+        printf("[4] Get host name\n");
+        printf("[5] Get activitiy link list\n");
+        printf("[6] Send message\n");
+        printf("[7] Exit\n");
+        printf("Select a number above: \n");
 
         scanf("%s", buffer);
-        // send(client_socket, buffer, sizeof(buffer), 0);
         if (strcmp(buffer, "1") == 0) {
             // have connected
             if (connected == 1) {
@@ -162,8 +164,8 @@ int main(){
                 *(int*)(request_packet + 3) = length;
                 *((char*)((int *)(request_packet + 3) + 1)) = '$';
                 *((int*)((char*)((int *)(request_packet + 3) + 1) + 1)) = list_number;
-                printf("%d\n", *((int*)((char*)((int *)(request_packet + 3) + 1) + 1)));
-                printf("%d\n", *((int*)(request_packet + 8)));
+                printf("target client number = %d\n", *((int*)((char*)((int *)(request_packet + 3) + 1) + 1)));
+                // printf("%d\n", *((int*)(request_packet + 8)));
                 
 
                 strcpy((char*)((int*)((char*)((int *)(request_packet + 3) + 1) + 1) + 1), content);
@@ -188,12 +190,6 @@ int main(){
             break;// jump to while loop
         }
 
-        // if (recv(client_socket, buffer, sizeof(buffer), 0) < 0) {
-        //     error("Error: receive data failed");
-        // }
-        // else {
-        //     printf("Server: %s\n", buffer);
-        // }
     }
 
     return 0;
@@ -209,9 +205,6 @@ void *ReceiveThread(void *sock_fd) {
 	// Get the socket descriptor
 	int conn_id = *(int*)sock_fd;
 	
-	// request data
-	char request[BUFFER_SIZE];
-	
 	// response data
 	char response[BUFFER_SIZE];
 	
@@ -219,7 +212,7 @@ void *ReceiveThread(void *sock_fd) {
 	while (1) {
         // judge if a complete response packet
         if (recv(conn_id, response, BUFFER_SIZE, 0) > 0) {
-            printf("Client: receive: %s\n", request);
+            printf("Client: receive: %s\n", response);
             if (*response == '$' && *(response + 1) == 'R' && *((char*)((int*)(response + 3) + 1)) == '$') {
                 if (*(response + 2) == 'T') {
                     int lengh = *(int*)(response + 3);
@@ -255,6 +248,16 @@ void *ReceiveThread(void *sock_fd) {
                     }
                     printf("\n");
                 }
+                else if (*(response + 2) == 'M') {
+                    int error_code = *((int*)((char*)((int *)(response + 3) + 1) + 1));
+                    printf("error_code = %d\n", *((int*)((char*)((int *)(response + 3) + 1) + 1)));
+                    if (error_code == CLIENT_NOT_EXIST) {
+                        printf("Target client does not exist.\n");
+                    }
+                    if (error_code == CLIENT_NOT_CONNECT) {
+                        printf("Target client does not connect.\n");
+                    }
+                }
             }
             if (*response == '$' && *(response + 1) == 'I' && *((char*)((int*)(response + 3) + 1)) == '$') {
                 if (*(response + 2) == 'M') {
@@ -265,32 +268,22 @@ void *ReceiveThread(void *sock_fd) {
                 }
             }
         }
-		// clear request data
-		memset(request, 0, BUFFER_SIZE);
-		
-		// // send response
-		// if (send(conn_id, response, strlen(response), 0) > 0) {
-		// 	printf("SEND: %s\n", response);
-		// } else {
-		// 	perror("send message error\n");
-		// }
+		memset(response, 0, BUFFER_SIZE);
 	}
 	
-	// // terminate connection
+	// exiting
+	pthread_exit(NULL);
+} 
+
+	
+	// terminate connection
 	// close(conn_id);
-	// std::cout << "[INFO] CONNECTION CLOSED\n";
+    // printf("CONNECTION CLOSED\n");
 	
 	// // decrease connection counts
 	// connection--;
 	
 	// // thread automatically terminate after exit connection handler
-	// std::cout << "[INFO] THREAD TERMINATED" << std::endl;
+    // printf("THREAD TERMINATED\n");
 	
 	// delete (int*)sock_fd;
-	
-	// // print line
-	// std::cout << "------------------------" << std::endl;
-	
-	// exiting
-	pthread_exit(NULL);
-} 
